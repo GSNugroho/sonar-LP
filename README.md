@@ -19,13 +19,17 @@ A read-only research & monitoring tool for [Meteora DLMM](https://meteora.ag) li
 
 ## Quick Start
 
-### 1. Install dependencies
+### 1. Clone & Install dependencies
 
 ```bash
-cd meridian-dashboard
-# Install server deps
+git clone https://github.com/GSNugroho/sonar-LP.git
+cd sonar-LP
+
+# Install all dependencies at once
+npm run install:all
+
+# Or manually:
 cd server && npm install
-# Install client deps
 cd ../client && npm install
 ```
 
@@ -70,7 +74,7 @@ Client runs on **http://localhost:3000** and proxies all `/api/*` requests to th
 ## Project Structure
 
 ```
-meridian-dashboard/
+sonar-LP/
 ├── server/
 │   ├── index.js              Express server (port 3001)
 │   ├── lib/
