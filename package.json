@@ -1,0 +1,13 @@
+{
+  "name": "sonar-dashboard",
+  "version": "1.0.0",
+  "description": "Sonar LP Intelligence Dashboard — Meteora DLMM research tool",
+  "private": true,
+  "scripts": {
+    "dev:server": "cd server && npm run dev",
+    "dev:client": "cd client && npm run dev",
+    "install:all": "cd server && npm install && cd ../client && npm install",
+    "start:server": "cd server && npm start",
+    "start:client": "cd client && npm start"
+  }
+}
