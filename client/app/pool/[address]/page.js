@@ -3,6 +3,7 @@ import { use, useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import LPerTable from '@/components/LPerTable';
+import PriceChart from '@/components/PriceChart';
 import { fmtUsd, fmtPct, fmtAddr, scoreColor, pctColor } from '@/components/utils';
 
 function ScoreGauge({ score }) {
@@ -192,6 +193,11 @@ export default function PoolPage({ params }) {
           {poolData.errors.dexscreener && `DexScreener: ${poolData.errors.dexscreener}`}
         </div>
       )}
+
+      {/* Price & volume chart */}
+      <div className="card" style={{ marginBottom: 20 }}>
+        <PriceChart address={address} />
+      </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16, marginBottom: 20 }}>
         {/* DexScreener momentum */}

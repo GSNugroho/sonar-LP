@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import PositionCard from '@/components/PositionCard';
-import { fmtUsd, fmtAddr, fmtAge, pnlClass, scoreColor } from '@/components/utils';
+import { fmtUsd, fmtAddr, scoreColor } from '@/components/utils';
 
 export default function WalletPage({ params }) {
   const { address } = use(params);
@@ -62,7 +62,6 @@ export default function WalletPage({ params }) {
   const sortedPositions = [...positions].sort((a, b) => {
     if (sortMode === 'pnl') return (b.real_pnl_usd ?? -Infinity) - (a.real_pnl_usd ?? -Infinity);
     if (sortMode === 'fees') return (b.fees_earned_usd ?? 0) - (a.fees_earned_usd ?? 0);
-    if (sortMode === 'age') return (b.age_hours ?? 0) - (a.age_hours ?? 0);
     if (sortMode === 'value') return (b.current_usd ?? 0) - (a.current_usd ?? 0);
     return 0;
   });
@@ -140,13 +139,13 @@ export default function WalletPage({ params }) {
             value: netPnl != null ? fmtUsd(netPnl) : '—',
             color: netPnl != null ? (netPnl >= 0 ? 'var(--green)' : 'var(--red)') : undefined,
           },
-          { label: 'Total Fees', value: fmtUsd(summary.total_fees_usd), color: '#86efac' },
+          { label: 'Unclaimed Fees', value: fmtUsd(summary.total_fees_usd), color: '#86efac' },
           {
             label: 'Win Rate',
             value: winRate != null ? winRate.toFixed(0) + '%' : '—',
             color: winRate != null ? scoreColor(winRate) : undefined,
           },
-          { label: 'Avg Hold', value: fmtAge(summary.avg_hold_hours) },
+          { label: 'Closed', value: summary.closed_positions ?? '—' },
         ].map(({ label, value, color }) => (
           <div key={label} className="card" style={{ padding: '14px 16px' }}>
             <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>{label}</div>
@@ -159,7 +158,7 @@ export default function WalletPage({ params }) {
       {chartData.length > 0 && (
         <div className="card" style={{ marginBottom: 20 }}>
           <div style={{ fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', marginBottom: 12 }}>
-            PnL per Position (top {chartData.length})
+            PnL per Pool (top {chartData.length})
           </div>
           <ResponsiveContainer width="100%" height={160}>
             <BarChart data={chartData} barCategoryGap="20%">
@@ -184,7 +183,7 @@ export default function WalletPage({ params }) {
       {positions.length > 0 && (
         <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
           <span style={{ fontSize: 12, color: 'var(--text-muted)', alignSelf: 'center' }}>Sort:</span>
-          {['pnl', 'fees', 'age', 'value'].map((m) => (
+          {['pnl', 'fees', 'value'].map((m) => (
             <button
               key={m}
               onClick={() => setSortMode(m)}

@@ -11,7 +11,7 @@ A read-only research & monitoring tool for [Meteora DLMM](https://meteora.ag) li
 | Feature | Description |
 |---|---|
 | 🔭 **Discover** | Scan **all** Meteora DLMM pools — rank by volume, fee/TVL, APR, fees, TVL or newest, with min-TVL filter, text search & pagination. Click through to the Pool Analyzer |
-| 📊 **Pool Analyzer** | Composite score (0–100), DexScreener momentum strip (m5/h1/h6/h24), buy/sell pressure, TVL, fee/TVL ratio, entry timing check, yield projection |
+| 📊 **Pool Analyzer** | Composite score (0–100), **price & volume chart** (1h–24h timeframes), real token holders/verification/blacklist, DexScreener momentum strip (m5/h1/h6/h24), buy/sell pressure, TVL, fee/TVL ratio, entry timing check, yield projection |
 | 👥 **LP Profiler** | All active positions for any wallet — PnL, fees, IL, in/out of range, position age |
 | 🔬 **LPer Table** | All wallets in a pool — share %, in-range status, unclaimed fees, age — sortable |
 | 📋 **Watchlist** | Save wallets with labels/notes, auto-refresh every 30s, browser notification alerts for new positions |
@@ -142,11 +142,14 @@ Pool detail comes from the **Meteora data API** (`dlmm.datapi.meteora.ag/pools/:
 | LP churn penalty | −4 | >50% churn = penalty (default 0 — feed offline) |
 | Blacklist penalty | −50 | Hard penalty when the pool is Meteora-flagged |
 
+### `GET /api/pool/:address/ohlcv?tf=24h`
+Price + volume candles for the Pool Analyzer chart, from the data API's `pools/:address/ohlcv`. `tf` ∈ `1h` (≈48h span) · `4h` (≈1w) · `12h` (≈2w) · `24h` (≈1mo). Returns `{ address, tf, candles[] }` where each candle is `{ t, ts, o, h, l, c, v }`. Cached 60s per `(address, tf)`.
+
 ### `GET /api/pool/:address/lpers`
-All wallets LPing in a pool, grouped by owner. Fields: `wallet`, `share_pct`, `in_range`, `unclaimed_fees_raw`, `age_hours`, `position_count`.
+⚠️ **Offline** — depends on the retired all-positions endpoint, which the data API has no public replacement for. Returns `502`; the Pool Analyzer hides the LPers section accordingly.
 
 ### `GET /api/wallet/:address/positions`
-All active Meteora DLMM positions for a wallet. Includes IL calculation and PnL where USD data is available.
+A wallet's open DLMM positions, **grouped by pool**, from the data API's `portfolio/open` feed (lifetime totals merged from `portfolio/total`). Each group: `pool_name`, `bin_step`, `in_range` (`true`/`partial`/`false` from the out-of-range breakdown), `position_count`, `deposited_usd`, `current_usd`, `fees_earned_usd` (unclaimed), `real_pnl_usd`, `real_pnl_pct`. Summary adds `net_pnl_usd`, `win_rate`, `closed_positions`, `realized_pnl_usd`, plus `sol_balance` (via RPC/Helius). All USD values are **real** (no longer estimated).
 
 ### `GET /api/watchlist` · `POST` · `PATCH /:address` · `DELETE /:address`
 CRUD for local watchlist.json.
@@ -168,17 +171,18 @@ Live position summary for a saved wallet (used by auto-refresh).
 
 | Source | Usage |
 |---|---|
-| [Meteora data API](https://dlmm.datapi.meteora.ag) | Pool listing (Discover), pool detail, token holders/verification/blacklist, multi-window volume/fees |
+| [Meteora data API](https://dlmm.datapi.meteora.ag) | Pool listing (Discover), pool detail, token holders/verification/blacklist, multi-window volume/fees, OHLCV candles, wallet portfolio (LP Profiler) |
 | [DexScreener](https://dexscreener.com) | Price changes, buy/sell txns, socials |
 | [Helius](https://helius.xyz) | SOL balances (optional) |
 | Solana RPC | SOL balance fallback |
 
-> ⚠️ The legacy `dlmm-api.meteora.ag/pair/*` API (pool detail + all-pool positions + wallet positions) has been **retired (returns 404)**. Pool detail was migrated to the data API above; the all-positions and wallet-positions feeds have no public replacement yet — see Limitations.
+> ⚠️ The legacy `dlmm-api.meteora.ag/pair/*` API has been **retired (returns 404)**. Pool detail → data API `pools/:address`; wallet positions → data API `portfolio/open`. The only piece with no public replacement is the **all-wallets-in-a-pool** feed (LPer Table) — see Limitations.
 
 ---
 
 ## Limitations
 
-- **LPer Table & LP Profiler are currently offline** — they depend on Meteora's retired all-positions / wallet-positions endpoints, which have no public replacement. The Pool Analyzer degrades gracefully (LP-depth shows a neutral placeholder; the score uses a neutral value for that component).
+- **LP Profiler** was migrated to the data API's `portfolio/open` feed — positions are now grouped per pool (not per individual position) and carry **real** USD PnL/fees/deposits. Per-position age and standalone IL are not exposed by this feed.
+- **LPer Table is still offline** — enumerating *all* wallets in a pool has no public endpoint on the data API (it is wallet-centric). The Pool Analyzer hides the LPers section and the LP-depth score component uses a neutral placeholder.
 - `holders` and token verification/blacklist are now **real** (from the data API). `bundlers_pct` and `top10_pct` still need a dedicated token-analytics API (not included); score uses safe defaults for those.
 - Telegram alerts fire server-side only during the `/refresh` poll; browser notifications fire client-side via the Watchlist page

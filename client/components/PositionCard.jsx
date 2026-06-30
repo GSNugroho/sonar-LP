@@ -4,6 +4,7 @@ import { fmtUsd, fmtPct, fmtAge, pnlClass } from './utils';
 
 function InRangeBadge({ inRange }) {
   if (inRange === true) return <span className="badge badge-green">✅ IN RANGE</span>;
+  if (inRange === 'partial') return <span className="badge badge-yellow">⚡ PARTIAL</span>;
   if (inRange === false) return <span className="badge badge-orange">⚠️ OOR</span>;
   return <span className="badge badge-gray">—</span>;
 }
@@ -17,10 +18,10 @@ export default function PositionCard({ position }) {
     deposited_usd,
     current_usd,
     fees_earned_usd,
-    il_usd,
     real_pnl_usd,
     real_pnl_pct,
     age_hours,
+    position_count,
   } = position;
 
   return (
@@ -67,8 +68,8 @@ export default function PositionCard({ position }) {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4">
         <Stat label="Deposited" value={fmtUsd(deposited_usd)} />
         <Stat label="Current" value={fmtUsd(current_usd)} />
-        <Stat label="Fees Earned" value={fmtUsd(fees_earned_usd)} highlight />
-        <Stat label="IL" value={il_usd != null ? fmtUsd(il_usd) : '—'} pnl={il_usd} />
+        <Stat label="Unclaimed Fees" value={fmtUsd(fees_earned_usd)} highlight />
+        <Stat label="Positions" value={position_count != null ? position_count : '—'} />
       </div>
 
       <div className="mt-3 text-xs flex gap-4" style={{ color: 'var(--text-muted)' }}>

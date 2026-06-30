@@ -6,6 +6,7 @@ const lpersRoute = require('./routes/lpers');
 const walletRoute = require('./routes/wallet');
 const watchlistRoute = require('./routes/watchlist');
 const discoverRoute = require('./routes/discover');
+const ohlcvRoute = require('./routes/ohlcv');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -50,6 +51,7 @@ app.get('/api/health', (_req, res) => res.json({ ok: true, ts: Date.now() }));
 // ─── Routes ──────────────────────────────────────────────────────────────────
 app.use('/api/pool', poolRoute);
 app.use('/api/pool', lpersRoute);
+app.use('/api/pool', ohlcvRoute);
 app.use('/api/wallet', walletRoute);
 app.use('/api/watchlist', watchlistRoute);
 app.use('/api/discover', discoverRoute);

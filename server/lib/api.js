@@ -36,6 +36,40 @@ async function getWalletPositions(walletAddress) {
 }
 
 /**
+ * A wallet's OPEN DLMM positions, grouped by pool, from the data API.
+ * Each pool item carries USD pnl/balances/fees, deposit, open-position count,
+ * and out-of-range breakdown. Envelope also includes a `total` summary.
+ */
+async function getWalletOpenPortfolio(walletAddress, { page = 1, pageSize = 50 } = {}) {
+  const params = new URLSearchParams({
+    user: walletAddress,
+    page: String(page),
+    page_size: String(pageSize),
+  });
+  const res = await fetch(`${METEORA_DATAPI_BASE}/portfolio/open?${params.toString()}`, {
+    timeout: 12000,
+  });
+  if (!res.ok) {
+    throw new Error(`Meteora data API ${res.status} for /portfolio/open`);
+  }
+  return res.json();
+}
+
+/** Lifetime portfolio totals (closed-position count + realized PnL). Non-fatal. */
+async function getWalletPortfolioTotal(walletAddress) {
+  try {
+    const res = await fetch(
+      `${METEORA_DATAPI_BASE}/portfolio/total?user=${walletAddress}`,
+      { timeout: 10000 }
+    );
+    if (!res.ok) return null;
+    return res.json();
+  } catch {
+    return null;
+  }
+}
+
+/**
  * List/scan DLMM pools from Meteora's data API (supports server-side
  * sort, filter, search, pagination across all ~115k pools).
  * @param {object} opts
@@ -45,6 +79,28 @@ async function getWalletPositions(walletAddress) {
  * @param {number} [opts.page]     1-based
  * @param {number} [opts.pageSize]
  */
+/**
+ * OHLCV candles (price + volume) for a pool from the Meteora data API.
+ * @param {string} address
+ * @param {object} opts
+ * @param {string} [opts.timeframe] 5m|30m|1h|2h|4h|12h|24h
+ * @param {number} [opts.start]     unix seconds
+ * @param {number} [opts.end]       unix seconds
+ */
+async function getPoolOhlcv(address, { timeframe = '24h', start, end } = {}) {
+  const params = new URLSearchParams({ timeframe });
+  if (start) params.set('start_time', String(start));
+  if (end) params.set('end_time', String(end));
+  const res = await fetch(
+    `${METEORA_DATAPI_BASE}/pools/${address}/ohlcv?${params.toString()}`,
+    { timeout: 10000 }
+  );
+  if (!res.ok) {
+    throw new Error(`Meteora data API ${res.status} for /pools/${address}/ohlcv`);
+  }
+  return res.json();
+}
+
 async function getPoolList({ sortBy, filterBy, query, page = 1, pageSize = 50 } = {}) {
   const params = new URLSearchParams();
   params.set('page', String(page));
@@ -102,8 +158,11 @@ async function getSolBalance(walletAddress) {
 module.exports = {
   getPoolDetail,
   getPoolList,
+  getPoolOhlcv,
   getPoolPositions,
   getWalletPositions,
+  getWalletOpenPortfolio,
+  getWalletPortfolioTotal,
   getDexScreenerPair,
   getHeliusBalances,
   getSolBalance,
