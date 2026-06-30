@@ -1,6 +1,7 @@
 const fetch = require('node-fetch');
 
 const METEORA_BASE = 'https://dlmm-api.meteora.ag';
+const METEORA_DATAPI_BASE = 'https://dlmm.datapi.meteora.ag';
 const HELIUS_BASE = 'https://api.helius.xyz/v0';
 
 async function meteoraFetch(path, timeout = 10000) {
@@ -11,8 +12,19 @@ async function meteoraFetch(path, timeout = 10000) {
   return res.json();
 }
 
+/**
+ * Pool detail from Meteora's data API. Returns the rich datapi shape
+ * (token_x/token_y w/ holders + verification, multi-window volume/fees/
+ * fee_tvl_ratio, tvl, created_at, is_blacklisted, …) or null on 404.
+ * Replaces the retired dlmm-api.meteora.ag/pair/:address endpoint.
+ */
 async function getPoolDetail(address) {
-  return meteoraFetch(`/pair/${address}`);
+  const res = await fetch(`${METEORA_DATAPI_BASE}/pools/${address}`, { timeout: 10000 });
+  if (res.status === 404) return null;
+  if (!res.ok) {
+    throw new Error(`Meteora data API ${res.status} for /pools/${address}`);
+  }
+  return res.json();
 }
 
 async function getPoolPositions(address) {
@@ -21,6 +33,33 @@ async function getPoolPositions(address) {
 
 async function getWalletPositions(walletAddress) {
   return meteoraFetch(`/position/wallet/${walletAddress}`, 15000);
+}
+
+/**
+ * List/scan DLMM pools from Meteora's data API (supports server-side
+ * sort, filter, search, pagination across all ~115k pools).
+ * @param {object} opts
+ * @param {string} [opts.sortBy]   e.g. "volume_24h:desc", "tvl:desc", "fee_tvl_ratio_24h:desc"
+ * @param {string} [opts.filterBy] e.g. "tvl>=50000 && is_blacklisted=false"
+ * @param {string} [opts.query]    free-text search (name / token / address)
+ * @param {number} [opts.page]     1-based
+ * @param {number} [opts.pageSize]
+ */
+async function getPoolList({ sortBy, filterBy, query, page = 1, pageSize = 50 } = {}) {
+  const params = new URLSearchParams();
+  params.set('page', String(page));
+  params.set('page_size', String(pageSize));
+  if (sortBy) params.set('sort_by', sortBy);
+  if (filterBy) params.set('filter_by', filterBy);
+  if (query) params.set('query', query);
+
+  const res = await fetch(`${METEORA_DATAPI_BASE}/pools?${params.toString()}`, {
+    timeout: 12000,
+  });
+  if (!res.ok) {
+    throw new Error(`Meteora data API ${res.status}`);
+  }
+  return res.json();
 }
 
 async function getDexScreenerPair(pairAddress, dexFetch) {
@@ -62,6 +101,7 @@ async function getSolBalance(walletAddress) {
 
 module.exports = {
   getPoolDetail,
+  getPoolList,
   getPoolPositions,
   getWalletPositions,
   getDexScreenerPair,

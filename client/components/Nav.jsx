@@ -6,6 +6,7 @@ export default function Nav() {
   const path = usePathname();
   const links = [
     { href: '/', label: 'Search' },
+    { href: '/discover', label: 'Discover' },
     { href: '/watchlist', label: 'Watchlist' },
   ];
 

@@ -10,6 +10,7 @@ A read-only research & monitoring tool for [Meteora DLMM](https://meteora.ag) li
 
 | Feature | Description |
 |---|---|
+| 🔭 **Discover** | Scan **all** Meteora DLMM pools — rank by volume, fee/TVL, APR, fees, TVL or newest, with min-TVL filter, text search & pagination. Click through to the Pool Analyzer |
 | 📊 **Pool Analyzer** | Composite score (0–100), DexScreener momentum strip (m5/h1/h6/h24), buy/sell pressure, TVL, fee/TVL ratio, entry timing check, yield projection |
 | 👥 **LP Profiler** | All active positions for any wallet — PnL, fees, IL, in/out of range, position age |
 | 🔬 **LPer Table** | All wallets in a pool — share %, in-range status, unclaimed fees, age — sortable |
@@ -105,24 +106,41 @@ sonar-LP/
 
 ## API Reference
 
+### `GET /api/discover`
+Scans all Meteora DLMM pools via Meteora's data API (`dlmm.datapi.meteora.ag`) with server-side sort, filter, search & pagination.
+
+**Query params:**
+| Param | Values | Default |
+|---|---|---|
+| `metric` | `volume` · `fees` · `fee_tvl` · `apr` · `tvl` · `created_at` | `volume` |
+| `window` | `5m` · `30m` · `1h` · `2h` · `4h` · `12h` · `24h` (windowed metrics only) | `24h` |
+| `order` | `asc` · `desc` | `desc` |
+| `min_tvl` / `min_volume` | USD threshold | — |
+| `q` | free-text search (name / token / address) | — |
+| `page` / `page_size` | pagination (page_size max 100) | `1` / `50` |
+| `include_blacklisted` | `true` to include blacklisted pools | `false` |
+
+Returns `{ pools[], total, pages, page, page_size, sort }`. Each pool: `address`, `name`, token symbols + verified flags, `tvl_usd`, `volume_24h_usd`, `fees_24h_usd`, `fee_tvl_24h_pct` (daily, computed from raw USD), `apr_pct`, `bin_step`, `base_fee_pct`, `age_hours`, `has_farm`, `launchpad`, `tags`. Cached 60s per query.
+
 ### `GET /api/pool/:address`
-Returns pool detail, composite score, DexScreener data, token info, LP depth, entry timing, yield projection.
+Pool detail comes from the **Meteora data API** (`dlmm.datapi.meteora.ag/pools/:address`) — this supplies **real token holders, verification & blacklist flags, and multi-window fee/TVL** (the retired `dlmm-api.meteora.ag/pair/:address` endpoint is no longer used). Returns composite score, DexScreener momentum, token info, entry timing, and yield projection.
 
 **Score breakdown (0–100):**
 | Component | Max pts | Notes |
 |---|---|---|
-| Fee/TVL ratio | 32 | Ideal 0.5–8% daily |
+| Fee/TVL ratio | 32 | Ideal 0.5–8% daily — from real 24h fees / TVL |
 | Organic volume | 14 | Heuristic vol/TVL |
 | Volume 24h | 10 | Relative to TVL |
-| Token holders | 8 | 1000+ = full pts |
-| LP depth | 8 | Active% + unique LPs |
+| Token holders | 8 | 1000+ = full pts — **real** holder count from data API |
+| LP depth | 8 | Neutral placeholder — all-positions feed offline (see Limitations) |
 | Buy pressure | 7 | 45–70% buys = healthy |
 | Volatility | 5 | h1 swing < 8% = full |
-| Pair age | 6 | 72h+ = stable |
-| Socials | 4 | Has Twitter/website |
-| Bundler penalty | −6 | High = less pts |
-| Top10 concentration | −4 | >30% = penalty |
-| LP churn penalty | −4 | >50% churn = penalty |
+| Pair age | 6 | 72h+ = stable — from data API `created_at` |
+| Socials | 4 | Has Twitter/website **or** verified token |
+| Bundler penalty | −6 | High = less pts (default 0 — not yet sourced) |
+| Top10 concentration | −4 | >30% = penalty (default — not yet sourced) |
+| LP churn penalty | −4 | >50% churn = penalty (default 0 — feed offline) |
+| Blacklist penalty | −50 | Hard penalty when the pool is Meteora-flagged |
 
 ### `GET /api/pool/:address/lpers`
 All wallets LPing in a pool, grouped by owner. Fields: `wallet`, `share_pct`, `in_range`, `unclaimed_fees_raw`, `age_hours`, `position_count`.
@@ -150,15 +168,17 @@ Live position summary for a saved wallet (used by auto-refresh).
 
 | Source | Usage |
 |---|---|
-| [Meteora DLMM API](https://dlmm-api.meteora.ag) | Pool details, positions |
-| [DexScreener](https://dexscreener.com) | Price changes, volume, buy/sell txns |
+| [Meteora data API](https://dlmm.datapi.meteora.ag) | Pool listing (Discover), pool detail, token holders/verification/blacklist, multi-window volume/fees |
+| [DexScreener](https://dexscreener.com) | Price changes, buy/sell txns, socials |
 | [Helius](https://helius.xyz) | SOL balances (optional) |
 | Solana RPC | SOL balance fallback |
+
+> ⚠️ The legacy `dlmm-api.meteora.ag/pair/*` API (pool detail + all-pool positions + wallet positions) has been **retired (returns 404)**. Pool detail was migrated to the data API above; the all-positions and wallet-positions feeds have no public replacement yet — see Limitations.
 
 ---
 
 ## Limitations
 
-- USD values for individual position PnL require Meteora to return `depositedUsd`/`currentUsd` — not all pools provide this
-- `holders`, `bundlers_pct`, `top10_pct` require dedicated token analytics APIs (not included); score uses safe defaults when unavailable
+- **LPer Table & LP Profiler are currently offline** — they depend on Meteora's retired all-positions / wallet-positions endpoints, which have no public replacement. The Pool Analyzer degrades gracefully (LP-depth shows a neutral placeholder; the score uses a neutral value for that component).
+- `holders` and token verification/blacklist are now **real** (from the data API). `bundlers_pct` and `top10_pct` still need a dedicated token-analytics API (not included); score uses safe defaults for those.
 - Telegram alerts fire server-side only during the `/refresh` poll; browser notifications fire client-side via the Watchlist page

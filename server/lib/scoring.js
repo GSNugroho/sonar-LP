@@ -14,6 +14,7 @@
  *   bundler_pct     -6 pts  (penalty)
  *   top10_pct       -4 pts  (concentration penalty — shared from holder score)
  *   lp_churn        -4 pts  (penalty if > 50% churn)
+ *   blacklist      -50 pts  (hard penalty — Meteora-flagged pool)
  *   total           ~100 pts
  */
 
@@ -132,6 +133,12 @@ function computeScore(p) {
     : 0;
   score -= churnPenalty;
   breakdown.churn_penalty = -+churnPenalty.toFixed(1);
+
+  // ── blacklist penalty (hard safety flag from Meteora data API) ─────────
+  // A blacklisted pool should never read as healthy — tank the score.
+  const blacklistPenalty = p.is_blacklisted ? 50 : 0;
+  score -= blacklistPenalty;
+  breakdown.blacklist_penalty = -blacklistPenalty;
 
   const finalScore = Math.round(clamp(score, 0, 100));
   return { score: finalScore, breakdown };

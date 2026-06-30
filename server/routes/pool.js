@@ -34,11 +34,22 @@ router.get('/:address', async (req, res, next) => {
       return res.status(404).json({ error: 'Pool not found', poolError, dexError });
     }
 
-    // ── Build normalized data ─────────────────────────────────────────────
-    const tvl = pool?.liquidity ?? dex?.liquidity?.usd ?? 0;
-    const vol24 = pool?.trade_volume_24h ?? dex?.volume?.h24 ?? 0;
-    const feePct = pool?.fee_rate ? pool.fee_rate / 10000 : 0.003;
-    const feeTvl24h = tvl > 0 ? (vol24 * feePct) / tvl : 0;
+    // ── Build normalized data (Meteora data API is the primary source) ────
+    const tx = pool?.token_x ?? {};
+    const ty = pool?.token_y ?? {};
+
+    const tvl = pool?.tvl ?? dex?.liquidity?.usd ?? 0;
+    const vol24 = pool?.volume?.['24h'] ?? dex?.volume?.h24 ?? 0;
+    const fees24 = pool?.fees?.['24h'] ?? null;
+
+    // Effective fee rate (fraction): prefer realized fees/volume, else config base fee.
+    const baseFeeFrac =
+      pool?.pool_config?.base_fee_pct != null ? pool.pool_config.base_fee_pct / 100 : 0.003;
+    const effectiveFeePct = fees24 != null && vol24 > 0 ? fees24 / vol24 : baseFeeFrac;
+
+    // fee/TVL 24h (fraction): prefer the real fee figure when available.
+    const feeTvl24h =
+      tvl > 0 ? (fees24 != null ? fees24 / tvl : (vol24 * effectiveFeePct) / tvl) : 0;
 
     const buysH1 = dex?.txns?.h1?.buys ?? 0;
     const sellsH1 = dex?.txns?.h1?.sells ?? 0;
@@ -50,70 +61,76 @@ router.get('/:address', async (req, res, next) => {
     const volTvlRatio = tvl > 0 ? vol24 / tvl : 0;
     const organicPct = volTvlRatio > 5 ? Math.max(10, 100 - (volTvlRatio - 5) * 10) : 80;
 
-    const pairAgeMs = dex?.pairCreatedAt ? Date.now() - dex.pairCreatedAt : 0;
-    const pairAgeHours = pairAgeMs / 3_600_000;
+    // Pair age: prefer datapi created_at (ms), fall back to DexScreener.
+    const createdAtMs = pool?.created_at ?? dex?.pairCreatedAt ?? null;
+    const pairAgeHours = createdAtMs ? (Date.now() - createdAtMs) / 3_600_000 : 0;
 
-    const hasSocials = !!(
-      dex?.info?.socials?.length ||
-      dex?.info?.websites?.length
-    );
+    // Trust signals: token_x is the project token in MEME-SOL / MEME-USDC pairs.
+    const isBlacklisted = !!pool?.is_blacklisted;
+    const baseVerified = !!tx.is_verified;
+    const hasDexSocials = !!(dex?.info?.socials?.length || dex?.info?.websites?.length);
+    const hasSocials = hasDexSocials || baseVerified;
 
-    // Token data (DexScreener provides some; holders need separate fetch)
+    // Token data — holders & verification now come from the data API (real).
     const tokenData = {
-      symbol: pool?.token_x_mint
-        ? (dex?.baseToken?.symbol ?? 'UNKNOWN')
-        : 'UNKNOWN',
-      name: dex?.baseToken?.name ?? null,
-      mint: pool?.token_x_mint ?? dex?.baseToken?.address ?? null,
-      holders: null, // would need Helius token-accounts call — set null if unavailable
-      bundlers_pct: null,
-      top10_pct: null,
-      narrative: null,
+      symbol: tx.symbol ?? dex?.baseToken?.symbol ?? 'UNKNOWN',
+      name: tx.name ?? dex?.baseToken?.name ?? null,
+      mint: tx.address ?? dex?.baseToken?.address ?? null,
+      holders: tx.holders ?? null,
+      is_verified: baseVerified,
+      is_blacklisted: isBlacklisted,
+      bundlers_pct: null, // not provided by the data API
+      top10_pct: null, //    "        "        "
+      narrative: pool?.launchpad || null,
     };
 
-    // ── LP depth from pool data ───────────────────────────────────────────
-    const openPositions = pool?.positions ?? pool?.open_position ?? 0;
-    const activePct = 60; // placeholder — computed properly in /lpers route
-    const uniqueLps = pool?.unique_wallets ?? 0;
-    const lpChurnPct = 0; // placeholder
-
     // ── Compute score ─────────────────────────────────────────────────────
+    // active_pct/unique_lps come from the all-positions feed, which the data
+    // API no longer exposes — use neutral defaults (no strong signal either way).
     const { score, breakdown } = computeScore({
       fee_tvl_24h: feeTvl24h,
       organic_pct: organicPct,
       volume_24h_usd: vol24,
       tvl_usd: tvl,
       holders: tokenData.holders ?? 500,
-      open_positions: openPositions,
-      active_pct: activePct,
-      unique_lps: uniqueLps,
-      lp_churn_pct: lpChurnPct,
+      open_positions: 0,
+      active_pct: 60,
+      unique_lps: 0,
+      lp_churn_pct: 0,
       buy_pressure_pct: buyPressurePct,
       price_change_h1: dex?.priceChange?.h1 ?? 0,
       pair_age_hours: pairAgeHours,
       has_socials: hasSocials,
-      bundler_pct: tokenData.bundlers_pct ?? 0,
-      top10_pct: tokenData.top10_pct ?? 30,
+      bundler_pct: 0,
+      top10_pct: 30,
+      is_blacklisted: isBlacklisted,
     });
 
     // ── Entry timing ──────────────────────────────────────────────────────
     const entryTiming = checkEntryTiming(dex);
 
     // ── Yield projection (1% share) ───────────────────────────────────────
-    const yieldProjection = projectYield(vol24, feePct, tvl, 0.01);
+    const yieldProjection = projectYield(vol24, effectiveFeePct, tvl, 0.01);
 
     const result = {
       pool: pool
         ? {
             address,
-            name: pool.name ?? `${dex?.baseToken?.symbol ?? '?'}/${dex?.quoteToken?.symbol ?? '?'}`,
+            name: pool.name ?? `${tx.symbol ?? '?'}/${ty.symbol ?? '?'}`,
             tvl_usd: tvl,
             volume_24h_usd: vol24,
-            fee_rate_bps: pool.fee_rate ?? null,
-            bin_step: pool.bin_step ?? null,
-            active_bin_id: pool.active_bin_id ?? null,
-            token_x: pool.token_x_mint ?? null,
-            token_y: pool.token_y_mint ?? null,
+            fees_24h_usd: fees24,
+            fee_tvl_24h_pct: tvl > 0 && fees24 != null ? +((fees24 / tvl) * 100).toFixed(2) : null,
+            fee_rate_bps:
+              pool.pool_config?.base_fee_pct != null
+                ? Math.round(pool.pool_config.base_fee_pct * 100)
+                : null,
+            bin_step: pool.pool_config?.bin_step ?? null,
+            active_bin_id: null, // not exposed by the data API pool-detail endpoint
+            has_farm: !!pool.has_farm,
+            is_blacklisted: isBlacklisted,
+            token_x: tx.address ?? null,
+            token_y: ty.address ?? null,
           }
         : null,
       score,
@@ -138,11 +155,13 @@ router.get('/:address', async (req, res, next) => {
         : null,
       token: tokenData,
       lp_depth: {
-        open_positions: openPositions,
-        active_pct: activePct,
-        unique_lps: uniqueLps,
-        lp_churn_pct: lpChurnPct,
-        note: 'Full LP depth available via /api/pool/:address/lpers',
+        open_positions: null,
+        active_positions: null,
+        active_pct: null,
+        unique_lps: null,
+        lp_churn_pct: 0,
+        source: 'unavailable',
+        note: "Per-position LP depth is temporarily unavailable — Meteora's all-positions API is offline. Score uses a neutral placeholder for this component.",
       },
       entry_timing: entryTiming,
       yield_projection: yieldProjection,

@@ -238,15 +238,37 @@ export default function PoolPage({ params }) {
           </div>
         )}
 
+        {/* Token */}
+        {token && (
+          <div className="card">
+            <SectionTitle>Token</SectionTitle>
+            <StatGrid items={[
+              { label: 'Symbol', value: token.symbol ?? '—' },
+              { label: 'Holders', value: token.holders != null ? Number(token.holders).toLocaleString() : '—' },
+            ]} />
+            <div style={{ display: 'flex', gap: 8, marginTop: 14, flexWrap: 'wrap' }}>
+              {token.is_verified
+                ? <span className="badge badge-green">✓ Verified</span>
+                : <span className="badge badge-gray">Unverified</span>}
+              {token.is_blacklisted && <span className="badge badge-red">⛔ Blacklisted</span>}
+              {token.narrative && <span className="badge badge-purple">{token.narrative}</span>}
+            </div>
+          </div>
+        )}
+
         {/* LP Depth */}
         <div className="card">
           <SectionTitle>LP Depth</SectionTitle>
-          <StatGrid items={[
-            { label: 'Open Positions', value: lp_depth?.open_positions ?? '—' },
-            { label: 'Active %', value: lp_depth?.active_pct != null ? lp_depth.active_pct + '%' : '—' },
-            { label: 'Unique LPs', value: lp_depth?.unique_lps ?? '—' },
-            { label: 'Churn %', value: lp_depth?.lp_churn_pct != null ? lp_depth.lp_churn_pct + '%' : '—' },
-          ]} />
+          {lp_depth?.source === 'unavailable' ? (
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5 }}>{lp_depth.note}</div>
+          ) : (
+            <StatGrid items={[
+              { label: 'Open Positions', value: lp_depth?.open_positions ?? '—' },
+              { label: 'Active %', value: lp_depth?.active_pct != null ? lp_depth.active_pct + '%' : '—' },
+              { label: 'Unique LPs', value: lp_depth?.unique_lps ?? '—' },
+              { label: 'Churn %', value: lp_depth?.lp_churn_pct != null ? lp_depth.lp_churn_pct + '%' : '—' },
+            ]} />
+          )}
         </div>
 
         {/* Yield Projection */}
@@ -273,12 +295,17 @@ export default function PoolPage({ params }) {
       <div className="card" style={{ marginTop: 8 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
           <SectionTitle style={{ marginBottom: 0 }}>Liquidity Providers</SectionTitle>
-          {!showLpers && (
+          {!showLpers && lp_depth?.source !== 'unavailable' && (
             <button onClick={loadLpers} className="btn btn-primary" style={{ fontSize: 13 }}>
               View LPers →
             </button>
           )}
         </div>
+        {lp_depth?.source === 'unavailable' && (
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5 }}>
+            Per-wallet LP breakdown is temporarily unavailable — Meteora&apos;s all-positions API is offline.
+          </div>
+        )}
         {showLpers && lpersLoading && <Spinner />}
         {showLpers && lpers && !lpers.error && (
           <>

@@ -5,6 +5,7 @@ const poolRoute = require('./routes/pool');
 const lpersRoute = require('./routes/lpers');
 const walletRoute = require('./routes/wallet');
 const watchlistRoute = require('./routes/watchlist');
+const discoverRoute = require('./routes/discover');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -51,6 +52,7 @@ app.use('/api/pool', poolRoute);
 app.use('/api/pool', lpersRoute);
 app.use('/api/wallet', walletRoute);
 app.use('/api/watchlist', watchlistRoute);
+app.use('/api/discover', discoverRoute);
 
 // ─── Global error handler ────────────────────────────────────────────────────
 app.use((err, _req, res, _next) => {
